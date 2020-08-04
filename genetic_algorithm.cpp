@@ -24,7 +24,7 @@ namespace ga {
 		sequence_length_(sequence_length),
 		spectrum_size_(spectrum.size()),
 		best_oligo_count_(sequence_length - oligo_length + 1),
-		population_size_(std::max(sequence_length/2 & ~1, 50)),
+		population_size_(50),
 		old_population_(population_size_, std::pair<int, std::vector <unsigned> >(0, std::vector <unsigned>(spectrum_size_))),
 		new_population_(population_size_, std::pair<int, std::vector <unsigned> >(0, std::vector <unsigned>(spectrum_size_))),
 		part_sum_fitness_(population_size_)
@@ -52,9 +52,9 @@ namespace ga {
 			ind.first = objective_function(ind.second);
 		}
 
-		auto best_value = 0;
-		auto iters_without_improvement = 0;
-		auto gen = 0;
+		size_t best_value = 0;
+		size_t iters_without_improvement = 0;
+		size_t gen = 0;
 
 
 		//main loop
@@ -66,7 +66,7 @@ namespace ga {
 			//gather information about population
 			struct stats stats{};
 			statistics(stats);
-			//report(stats, gen);
+			report(stats, gen);
 			const auto new_best_value = stats.max;
 
 			if (new_best_value > best_value) {
@@ -143,35 +143,74 @@ namespace ga {
 		return result;
 	}
 
+	//inline int genetic_algorithm::objective_function(const individual_t& ind) const
+	//{
+	//	std::vector <size_t> overlaps(spectrum_size_);
+
+	//	auto p = start_oligo_idx_;
+	//	size_t overlaps_idx = 0;
+	//	do {
+	//		//overlaps[overlaps_idx++] = calc_overlap(spectrum[p].seq, spectrum[ind[p]].seq, oligo_length);
+	//		overlaps[overlaps_idx++] = overlap_matrix_[p][ind[p]];
+	//		p = ind[p];
+	//	} while (p != start_oligo_idx_);
+
+	//	size_t current_end;
+	//	size_t current_start = current_end = 0;
+	//	size_t current_length = oligo_length_;
+	//	size_t max_count = 1;
+
+	//	for (size_t i = 0; i < overlaps.size(); ++i) {
+	//		if (overlaps[i] == 0) {
+	//			current_start = ++current_end;
+	//			if (current_start < overlaps.size()) current_length = oligo_length_;
+	//			continue;
+	//		}
+	//		current_length += (oligo_length_ - overlaps[i]);
+	//		current_end++;
+	//		while (current_length > sequence_length_)
+	//			current_length -= (oligo_length_ - overlaps[current_start++]);
+	//		max_count = std::max(max_count, current_end - current_start + 1);
+	//	}
+	//	return max_count;
+	//}
+
 	inline int genetic_algorithm::objective_function(const individual_t& ind) const
 	{
-		std::vector <unsigned> overlaps(spectrum_size_);
-
-		auto p = start_oligo_idx_;
-		unsigned overlaps_idx = 0;
-		do {
-			//overlaps[overlaps_idx++] = calc_overlap(spectrum[p].seq, spectrum[ind[p]].seq, oligo_length);
-			overlaps[overlaps_idx++] = overlap_matrix_[p][ind[p]];
-			p = ind[p];
-		} while (p != start_oligo_idx_);
-
-		size_t current_end;
-		size_t current_start = current_end = 0;
+		auto current_start = start_oligo_idx_;
+		size_t current_end = current_start;
 		size_t current_length = oligo_length_;
 		size_t max_count = 1;
+		size_t current_count = 1;
+		bool is_end_passed = false;
 
-		for (size_t i = 0; i < overlaps.size(); ++i) {
-			if (overlaps[i] == 0) {
-				current_start = ++current_end;
-				if (current_start < overlaps.size()) current_length = oligo_length_;
+		do {
+			if(overlap_matrix_[current_end][ind[current_end]] == 0)
+			{
+				if(current_start != current_end) {
+					if(is_end_passed)
+						return max_count;
+					current_length = oligo_length_;
+					current_count = 1;
+				}
+				current_start = current_end = ind[current_end];
 				continue;
 			}
-			current_length += (oligo_length_ - overlaps[i]);
-			current_end++;
-			while (current_length > sequence_length_)
-				current_length -= (oligo_length_ - overlaps[current_start++]);
-			max_count = std::max(max_count, current_end - current_start + 1);
-		}
+			current_length += oligo_length_ - overlap_matrix_[current_end][ind[current_end]];
+			current_end = ind[current_end];
+			current_count++;
+			while(current_length > sequence_length_)
+			{
+				current_length -= oligo_length_ - overlap_matrix_[current_start][ind[current_start]];
+				current_start = ind[current_start];
+				current_count--;
+			}
+			max_count = std::max(max_count, current_length);
+			current_end = ind[current_end];
+			if(current_end == start_oligo_idx_)
+				is_end_passed = true;
+		} while (current_start != start_oligo_idx_);
+
 		return max_count;
 	}
 
@@ -182,14 +221,13 @@ namespace ga {
 
 	inline void genetic_algorithm::calc_overlap_matrix()
 	{
-		for (auto i = 0; i < spectrum_size_; ++i)
+		for (size_t i = 0; i < spectrum_size_; ++i)
 		{
-			for (auto j = 0; j < i; ++j)
+			for (size_t j = 0; j < spectrum_size_; ++j)
 			{
+				if(i == j) continue;
 				overlap_matrix_[i][j] = calc_overlap(spectrum_[i].seq, spectrum_[j].seq, oligo_length_);
-				overlap_matrix_[j][i] = calc_overlap(spectrum_[j].seq, spectrum_[i].seq, oligo_length_);
 			}
-			
 		}
 	}
 
@@ -256,7 +294,6 @@ namespace ga {
 		auto is_overlap_with_pred_less = true;
 
 		auto p = start_oligo_idx_;
-		auto size = best_oligo_count_;
 		do {
 			p = individual[p];
 			const auto overlap_with_succ = calc_overlap(spectrum_[p].seq, spectrum_[individual[p]].seq, oligo_length_);
@@ -317,101 +354,109 @@ namespace ga {
 			return;
 		}
 
-		// Variables to track the beginning and the ending of constructed oligo sequence
-		int oligo_first_idx, oligo_last_idx;
+		// Store predecessors vector to 
+		individual_t parent1_predecessors(spectrum_size_), parent2_predecessors(spectrum_size_);
+		auto p = 0;
+		do {
+			parent1_predecessors[parent1[p]] = p;
+			p = parent1[p];
+		} while (p != 0);
 
-		// Store overlaps and corresponding indices of oligos adjacent to edge oligos in both parents
-		int adjacent_overlaps[4]{ 0 }; //0,1 - predecessors; 2,3 - successors
-		unsigned adjacent_indices[4];
+		p = 0;
+		do {
+			parent2_predecessors[parent2[p]] = p;
+			p = parent2[p];
+		} while (p != 0);
 
-		std::vector <bool> is_in_offspring(spectrum_size_, false);
-
-		const std::uniform_int_distribution<int> rand_idx(0, spectrum_size_ - 1);
 
 		// Begin constructing from random oligo
-		oligo_first_idx = oligo_last_idx = rand_idx(gen);
+		const std::uniform_int_distribution<int> rand_idx(0, spectrum_size_ - 1);
+		size_t oligo_first_idx = rand_idx(gen);
+		size_t oligo_last_idx = oligo_first_idx;
 
+
+		std::vector <bool> is_in_offspring(spectrum_size_, false);
 		// Mark this oligo so we know it's already in offspring
 		is_in_offspring[oligo_first_idx] = true; 
-
-		// Track how many oligos are not added yet
-		int oligos_left = spectrum_size_ - 1;
 
 		// Flag shows which side of constructed sequence was modified last
 		bool is_beginning_modified = true; 
 
-		while (oligos_left--) {
-			/**
-			 * If last added oligo was at the beginning, calculate overlaps between oligos
-			 * predeceasing to first oligo in both parents and first oligo in constructed sequence
-			 * Also calculate on first iteration
-			 */
-			if (is_beginning_modified) {
-				find_predecessors_in_parents(parent1, parent2, oligo_first_idx, adjacent_indices);
-				for (auto i : { 0, 1 }) {
-					if (!is_in_offspring[adjacent_indices[i]]) { 
-						//adjacent_overlaps[i] = calc_overlap(spectrum[adjacent_indices[i]].seq, spectrum[oligo_first_idx].seq, oligo_length);
-						adjacent_overlaps[i] = overlap_matrix_[adjacent_indices[i]][oligo_first_idx];
-					}
-				}
-			}
+		// Impossible index value to indicate max index hasn't been chosen yet
+		const auto INDEX_UNSET = spectrum_size_;
 
-			/**
-			 * If last added oligo was at the ending, calculate overlaps between last oligo
-			 * in constructed sequence and oligos succeeding to last oligo in both parents
-			 * Also calculate on first iteration
-			 */
-			if (!is_beginning_modified || oligos_left == spectrum_size_ - 2) { 
+		for(size_t oligo_num = 0; oligo_num < spectrum_size_ - 1; oligo_num++)
+		{
+			// Store overlaps and corresponding indices of oligos adjacent to edge oligos in both parents
+			// 0,1 - predecessors; 2,3 - successors
+			size_t adjacent_indices[4];
+			size_t adjacent_overlaps[4]{ 0 }; 
+			size_t max_tie_indices[4];
+			int tie_idx = -1;
+			size_t max_overlap_idx = INDEX_UNSET;
+
+			if(is_beginning_modified) {
+				adjacent_indices[0] = parent1_predecessors[oligo_first_idx];
+				adjacent_indices[1] = parent2_predecessors[oligo_first_idx];
+				adjacent_overlaps[0] = overlap_matrix_[parent1_predecessors[oligo_first_idx]][oligo_first_idx];
+				adjacent_overlaps[1] = overlap_matrix_[parent2_predecessors[oligo_first_idx]][oligo_first_idx];
+			}
+			if(!is_beginning_modified || oligo_num == 0) {
 				adjacent_indices[2] = parent1[oligo_last_idx];
 				adjacent_indices[3] = parent2[oligo_last_idx];
-				for (auto i : { 2, 3 }) {
-					if (!is_in_offspring[adjacent_indices[i]]) {
-						//adjacent_overlaps[i] = calc_overlap(spectrum[oligo_last_idx].seq, spectrum[adjacent_indices[i]].seq, oligo_length);
-						adjacent_overlaps[i] = overlap_matrix_[oligo_last_idx][adjacent_indices[i]];
+				adjacent_overlaps[2] = overlap_matrix_[oligo_last_idx][parent1[oligo_last_idx]];
+				adjacent_overlaps[3] = overlap_matrix_[oligo_last_idx][parent2[oligo_last_idx]];
+			}
+
+			int max_overlap = -1;
+			//const size_t max_overlap_idx = std::distance(adjacent_overlaps, std::max_element(adjacent_overlaps, adjacent_overlaps + 4));
+			for(size_t i = 0; i < 4; ++i)
+			{
+				assert(adjacent_indices[i] < spectrum_size_);
+
+				if(!is_in_offspring[adjacent_indices[i]])
+					if(adjacent_overlaps[i] > max_overlap)
+					{
+						if(adjacent_overlaps[i] == max_overlap)
+							tie_idx++;
+						else
+							tie_idx = 0;
+
+						max_tie_indices[tie_idx] = adjacent_indices[i];
+						max_overlap = adjacent_overlaps[i];	
 					}
-				}
 			}
 
-			auto max_overlap = -1, max_overlap_idx = -1;
-			for (auto i = 0; i < 4; i++) {
-				if (!is_in_offspring[adjacent_indices[i]] && adjacent_overlaps[i] > max_overlap) {
-					max_overlap = adjacent_overlaps[i];
-					max_overlap_idx = adjacent_indices[i];
-					is_beginning_modified = i < 2;
-				}
+			if(tie_idx == 0)
+				max_overlap_idx = max_tie_indices[tie_idx];
+
+			if(tie_idx > 0) {
+				std::uniform_int_distribution<size_t> random_max(0, tie_idx);
+				max_overlap_idx = max_tie_indices[random_max(gen)];
 			}
 
-			/**
-			* If all adjacent oligos are already in offspring,
-			* search for best fitted oligo in whole spectrum
-			*/
-			if (max_overlap_idx == -1) {
-				
-				for (auto i = 0; i < spectrum_size_; ++i) {
+			if(max_overlap_idx == INDEX_UNSET)
+			{
+				for (size_t i = 0; i < spectrum_size_; ++i) {
 					if (!is_in_offspring[i]) {
-							//const int tmp_overlap_pred = calc_overlap(spectrum[i].seq, spectrum[oligo_first_idx].seq, oligo_length);
-							//const int tmp_overlap_succ = calc_overlap(spectrum[oligo_last_idx].seq, spectrum[i].seq, oligo_length);
-							const int tmp_overlap_pred = overlap_matrix_[i][oligo_first_idx];
-							const int tmp_overlap_succ = overlap_matrix_[oligo_last_idx][i];
-							int tmp_overlap;
+						int tmp_overlap;
 
-							if (tmp_overlap_pred > tmp_overlap_succ) {
-								is_beginning_modified = true;
-								tmp_overlap = tmp_overlap_pred;
-							} else
-							{
-								is_beginning_modified = false;
-								tmp_overlap = tmp_overlap_succ;
-							}
+						if (overlap_matrix_[i][oligo_first_idx] > overlap_matrix_[oligo_last_idx][i]) {
+							is_beginning_modified = true;
+							tmp_overlap = overlap_matrix_[i][oligo_first_idx];
+						}
+						else {
+							is_beginning_modified = false;
+							tmp_overlap = overlap_matrix_[oligo_last_idx][i];
+						}
 
-							if (tmp_overlap > max_overlap) {
-								max_overlap = tmp_overlap;
-								max_overlap_idx = i;
-							}
+						if (tmp_overlap > max_overlap) {
+							max_overlap = tmp_overlap;
+							max_overlap_idx = i;
+						}
 					}
 				}
 			}
-
 			if (is_beginning_modified) {
 				offspring[oligo_last_idx] = max_overlap_idx;
 				oligo_last_idx = max_overlap_idx;
@@ -425,7 +470,8 @@ namespace ga {
 		}
 		offspring[oligo_last_idx] = oligo_first_idx;
 		mutation(offspring);
-	}
+		}
+
 
 
 	inline int genetic_algorithm::partsum_select() const
@@ -504,7 +550,7 @@ namespace ga {
 			std::printf(" %4d %45s     %3d       %3.2f\n", i, "Individual", objective, fitness_function(objective));
 		}
 		std::printf("------------------------------------------------------------------------\n");
-		std::printf("   max = %3d    min = %3d  avg = %3.3f                                  \n", stats.max, stats.min, stats.avg);
+		std::printf("   max = %3llu    min = %3llu  avg = %3.3f                                  \n", stats.max, stats.min, stats.avg);
 		std::printf("------------------------------------------------------------------------\n\n");
 	}
 }

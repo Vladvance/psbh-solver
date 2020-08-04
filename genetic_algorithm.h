@@ -35,8 +35,8 @@ namespace ga {
 		const size_t oligo_length_;
 		const size_t sequence_length_;
 
-		const int spectrum_size_;
-		const int best_oligo_count_;
+		const size_t spectrum_size_;
+		const size_t best_oligo_count_;
 		const size_t population_size_;
 		size_t parents_count_;
 
