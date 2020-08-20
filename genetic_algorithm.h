@@ -16,16 +16,18 @@ namespace ga {
 	};
 
 
-	typedef std::vector<unsigned> individual_t;
+	typedef std::vector<size_t> individual_t;
 	typedef std::vector<std::pair<int, individual_t>> population_t;
 
 
 	class genetic_algorithm {
 
 	public:
-		genetic_algorithm(const std::vector<oligo>& spectrum, unsigned start_oligo_idx, int oligo_length,
-		                  int sequence_length);
+		genetic_algorithm(const std::vector<oligo>& spectrum, size_t start_oligo_idx, size_t oligo_length,
+		                  size_t sequence_length);
 		genetic_algorithm(const sbh_data& problem);
+		bool is_perfect_overlap(uint32_t lhs, uint32_t rhs) const;
+		void preprocess();
 		void run();
 
 	private:
@@ -49,20 +51,20 @@ namespace ga {
 		population_t new_population_;
 		std::vector<float> part_sum_fitness_;
 
-		void calc_overlap_matrix();
+		void calc_overlap_matrix() noexcept;
 
-		static void generate_individual(individual_t& ind);
-		void generate_population();
+		static void generate_individual(individual_t& ind) noexcept;
+		void generate_population() noexcept;
 
-		static void find_predecessors_in_parents(const individual_t& parent1, const individual_t& parent2, uint32_t oligo, unsigned result[2]);
+		static void find_predecessors_in_parents(const individual_t& parent1, const individual_t& parent2, uint32_t oligo, size_t result[2]) noexcept;
 
-		static void validate(const individual_t& ind);
-		std::string get_sequence(const individual_t& ind) const;
-		std::string format_individual(const individual_t& ind) const;
-		int objective_function(const individual_t& ind) const;
-		float fitness_function(int objective) const;
-		void mutation(individual_t& individual) const;
-		void crossover(const individual_t& parent1, const individual_t& parent2, individual_t& offspring) const;
+		static void validate(const individual_t& ind) noexcept;
+		std::string get_sequence(const individual_t& ind) const ;
+		std::string format_individual(const individual_t& ind) const ;
+		int objective_function(const individual_t& ind) const noexcept;
+		float fitness_function(int objective) const noexcept;
+		void mutation(individual_t& individual) const noexcept;
+		void crossover(const individual_t& parent1, const individual_t& parent2, individual_t& offspring) const ;
 
 		//stochastic remainder sampling with replacement
 		//std::vector<int> preselect(float avg_fitness) const;
@@ -72,8 +74,8 @@ namespace ga {
 		void calc_part_sum_fitness(float avg_fitness);
 		void generation();
 		void statistics(stats& stats) const;
-		void report(stats& stats, int gen) const;
-
+		void report(const stats& stats, int gen) const;
+		static void summary(const stats& stats, int gen);
 	};
 }
 

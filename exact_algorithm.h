@@ -13,7 +13,6 @@ namespace ea {
 	struct greater_then_posl {
 		bool operator()(const oligo& lhs, const oligo& rhs) const { return lhs.posL > rhs.posL; }
 	};
-
 	
 	class exact_algorithm
 	{
@@ -33,7 +32,8 @@ namespace ea {
 		void generate_complete_graph();
 	public:
 		void run();
-		exact_algorithm(const sbh_data& problem) :
+
+		explicit exact_algorithm(const sbh_data& problem) :
 			posh_queue_(posH_comparator_, problem.spectrum),
 			posl_queue_(posL_comparator_, problem.spectrum),
 			sequence_length_(problem.sequence_length),

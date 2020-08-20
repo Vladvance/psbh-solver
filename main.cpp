@@ -21,9 +21,11 @@ int main()
 	const auto problem = load_problem_xml(std::cin);
 
 	ga::genetic_algorithm ga(problem);
-	//ea::exact_algorithm ea(problem);
-
 	ga.run();
+
+	//ea::exact_algorithm ea(problem);
+	//ea.run();
+
 
 	return 0;
 }

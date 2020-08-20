@@ -114,6 +114,7 @@
   <ItemGroup>
     <ClCompile Include="exact_algorithm.cpp" />
     <ClCompile Include="genetic_algorithm.cpp" />
+    <ClCompile Include="lib\pugixml\pugixml.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -122,6 +123,8 @@
     <ClInclude Include="lib\cxxopts.hpp" />
     <ClInclude Include="lib\cxxproperties.hpp" />
     <ClInclude Include="lib\cxxtimer.hpp" />
+    <ClInclude Include="lib\pugixml\pugiconfig.hpp" />
+    <ClInclude Include="lib\pugixml\pugixml.hpp" />
     <ClInclude Include="lib\rapidxml\rapidxml.hpp" />
     <ClInclude Include="lib\rapidxml\rapidxml_utils.hpp" />
     <ClInclude Include="sbh_utils.h" />

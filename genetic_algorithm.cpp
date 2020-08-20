@@ -10,32 +10,36 @@
 
 namespace ga {
 
-
 	std::random_device rd;
-	std::mt19937 gen(rd());
 
 
-	genetic_algorithm::genetic_algorithm(const std::vector<oligo>& spectrum, const unsigned start_oligo_idx,
-		const int oligo_length, const int sequence_length) :
+	genetic_algorithm::genetic_algorithm(const std::vector<oligo>& spectrum, const size_t start_oligo_idx,
+		const size_t oligo_length, const size_t sequence_length) :
 		spectrum_(spectrum),
-		overlap_matrix_(spectrum.size(), std::vector< size_t > (spectrum.size(),  0)),
+		overlap_matrix_(spectrum.size(), std::vector<size_t>(spectrum.size(), 0)),
 		start_oligo_idx_(start_oligo_idx),
 		oligo_length_(oligo_length),
 		sequence_length_(sequence_length),
 		spectrum_size_(spectrum.size()),
-		best_oligo_count_(sequence_length - oligo_length + 1),
+		best_oligo_count_(sequence_length - oligo_length + 1LL),
 		population_size_(50),
-		old_population_(population_size_, std::pair<int, std::vector <unsigned> >(0, std::vector <unsigned>(spectrum_size_))),
-		new_population_(population_size_, std::pair<int, std::vector <unsigned> >(0, std::vector <unsigned>(spectrum_size_))),
+		old_population_(population_size_, { 0, individual_t(spectrum_size_) }),
+		new_population_(population_size_, { 0, individual_t(spectrum_size_) }),
 		part_sum_fitness_(population_size_)
 	{
-		parents_count_ = static_cast<unsigned>(crossover_probability_ * population_size_);
+		parents_count_ = static_cast<size_t>(crossover_probability_ * population_size_);
 		if (parents_count_ & 1) parents_count_++; //should be even number of parents
 	}
 
 	genetic_algorithm::genetic_algorithm(const sbh_data& problem) :
 		genetic_algorithm(problem.spectrum, problem.start_oligo_idx, problem.oligo_length, problem.sequence_length)
 	{}
+
+	bool genetic_algorithm::is_perfect_overlap(const uint32_t lhs, const uint32_t rhs) const
+	{
+		const uint32_t mask = (1 << 2 * (oligo_length_ - 1)) - 1;
+		return (lhs & mask) == rhs >> 2;
+	}
 
 
 	void genetic_algorithm::run()
@@ -64,23 +68,25 @@ namespace ga {
 			generation();
 
 			//gather information about population
-			struct stats stats{};
+			struct stats stats {};
 			statistics(stats);
-			report(stats, gen);
+			//report(stats, gen);
+			summary(stats, gen);
 			const auto new_best_value = stats.max;
 
 			if (new_best_value > best_value) {
 				best_value = new_best_value;
 				iters_without_improvement = 0;
 				if (best_value == best_oligo_count_) break;
-			} else
+			}
+			else
 			{
 				iters_without_improvement++;
 			}
 
 			//swap old and new populations
 			old_population_.swap(new_population_);
-		//} while (gen < max_generation);
+			//} while (gen < max_generation);
 		} while (gen < max_generation && iters_without_improvement < 50);
 
 		const auto end = std::chrono::steady_clock::now();
@@ -96,8 +102,9 @@ namespace ga {
 	}
 
 
-	inline void genetic_algorithm::validate(const individual_t& ind) {
-		unsigned count = 0, p = 0;
+	inline void genetic_algorithm::validate(const individual_t& ind) noexcept
+	{
+		size_t count = 0, p = 0;
 		do {
 			count++;
 			p = ind[p];
@@ -130,11 +137,11 @@ namespace ga {
 		do {
 			const auto overlap = overlap_matrix_[p][ind[p]];
 			sequence_length += oligo_length_ - overlap;
-			if(sequence_length > sequence_length_ && !is_ended) {
+			if (sequence_length > sequence_length_ && !is_ended) {
 				is_ended = true;
 				result.append("--------------------------------------------\n");
 			}
-			if(overlap != oligo_length_ - 1)
+			if (overlap != oligo_length_ - 1)
 				result.append("Bad overlap: " + std::to_string(p) + ":" + decode_n_last(spectrum_[p].seq, oligo_length_) + "-" + std::to_string(ind[p]) + ":" + decode_n_last(spectrum_[ind[p]].seq, oligo_length_) + " = " + std::to_string(overlap) + "\n");
 			//result.append(std::string(sequence_length - overlap, ' '));
 			//result.append(decode_n_last(spectrum_[p].seq, oligo_length_) + "\n");
@@ -175,7 +182,7 @@ namespace ga {
 	//	return max_count;
 	//}
 
-	inline int genetic_algorithm::objective_function(const individual_t& ind) const
+	inline int genetic_algorithm::objective_function(const individual_t& ind) const noexcept
 	{
 		auto current_start = start_oligo_idx_;
 		size_t current_end = current_start;
@@ -185,11 +192,12 @@ namespace ga {
 		bool is_end_passed = false;
 
 		do {
-			if(overlap_matrix_[current_end][ind[current_end]] == 0)
+			if (overlap_matrix_[current_end][ind[current_end]] == 0)
 			{
-				if(current_start != current_end) {
-					if(is_end_passed)
-						return max_count;
+				if (is_end_passed)
+					return max_count;
+
+				if (current_start != current_end) {
 					current_length = oligo_length_;
 					current_count = 1;
 				}
@@ -199,33 +207,34 @@ namespace ga {
 			current_length += oligo_length_ - overlap_matrix_[current_end][ind[current_end]];
 			current_end = ind[current_end];
 			current_count++;
-			while(current_length > sequence_length_)
+
+			if (current_end == start_oligo_idx_)
+				is_end_passed = true;
+
+			while (current_length > sequence_length_)
 			{
 				current_length -= oligo_length_ - overlap_matrix_[current_start][ind[current_start]];
 				current_start = ind[current_start];
 				current_count--;
 			}
-			max_count = std::max(max_count, current_length);
-			current_end = ind[current_end];
-			if(current_end == start_oligo_idx_)
-				is_end_passed = true;
-		} while (current_start != start_oligo_idx_);
+			max_count = std::max(max_count, current_count);
+		} while (current_start != start_oligo_idx_ && !is_end_passed);
 
 		return max_count;
 	}
 
-	inline float genetic_algorithm::fitness_function(const int objective) const
+	inline float genetic_algorithm::fitness_function(const int objective) const noexcept
 	{
-		return static_cast<float>(objective) / static_cast<float>(best_oligo_count_) * scaling_factor_; 
+		return static_cast<float>(objective) / static_cast<float>(best_oligo_count_) * scaling_factor_;
 	}
 
-	inline void genetic_algorithm::calc_overlap_matrix()
+	inline void genetic_algorithm::calc_overlap_matrix() noexcept
 	{
 		for (size_t i = 0; i < spectrum_size_; ++i)
 		{
 			for (size_t j = 0; j < spectrum_size_; ++j)
 			{
-				if(i == j) continue;
+				if (i == j) continue;
 				overlap_matrix_[i][j] = calc_overlap(spectrum_[i].seq, spectrum_[j].seq, oligo_length_);
 			}
 		}
@@ -235,11 +244,11 @@ namespace ga {
 	 * Generate temporal array of indices,
 	 * shuffle it and map to individual using adjacency representation
 	 */
-	inline void genetic_algorithm::generate_individual(individual_t& ind)
+	inline void genetic_algorithm::generate_individual(individual_t& ind) noexcept
 	{
 		individual_t tmp(ind.size());
 		std::iota(tmp.begin(), tmp.end(), 0);
-		std::shuffle(tmp.begin(), tmp.end(), gen);
+		std::shuffle(tmp.begin(), tmp.end(), rd);
 
 		auto index = ind[tmp.back()] = tmp.front();
 		for (auto i = 1u; i < tmp.size(); ++i) {
@@ -250,7 +259,7 @@ namespace ga {
 	/**
 	 * \brief Generate initial random population of individuals
 	 */
-	inline void genetic_algorithm::generate_population()
+	inline void genetic_algorithm::generate_population() noexcept
 	{
 		for (auto& ind : old_population_) {
 			generate_individual(ind.second);
@@ -262,11 +271,11 @@ namespace ga {
 	 * \brief Find indices of predecessors of given oligonucleotide in both parents
 	 * \param parent1 first parent
 	 * \param parent2 second parent
-	 * \param oligo oligonucleotide which predecessors must be found 
+	 * \param oligo oligonucleotide which predecessors must be found
 	 * \param result array of predecessors indices
 	 */
 	inline void genetic_algorithm::find_predecessors_in_parents(const individual_t& parent1, const individual_t& parent2,
-		const uint32_t oligo, unsigned result[2])
+		const uint32_t oligo, size_t result[2]) noexcept
 	{
 		const auto pred1 = std::find(parent1.begin(), parent1.end(), oligo);
 		const auto pred2 = std::find(parent2.begin(), parent2.end(), oligo);
@@ -278,12 +287,12 @@ namespace ga {
 	 * \brief Apply mutation on given individual with probability mutation_probability_
 	 * \param individual individual on which mutation should be applied
 	 */
-	inline void genetic_algorithm::mutation(individual_t& individual) const
+	inline void genetic_algorithm::mutation(individual_t& individual) const noexcept
 	{
 		const std::bernoulli_distribution is_mutation(mutation_probability_);
 
 		// Return if mutation should not be applied
-		if (!is_mutation(gen)) {
+		if (!is_mutation(rd)) {
 			return;
 		}
 
@@ -340,11 +349,11 @@ namespace ga {
 	{
 		const std::bernoulli_distribution is_crossover(crossover_probability_);
 
-		if (!is_crossover(gen)) {
+		if (!is_crossover(rd)) {
 
 			// Randomly choose one parent to become offspring
 			const std::bernoulli_distribution is_first_parent(0.5);
-			if (is_first_parent(gen)) {
+			if (is_first_parent(rd)) {
 				offspring = parent1;
 			}
 			else {
@@ -371,37 +380,37 @@ namespace ga {
 
 		// Begin constructing from random oligo
 		const std::uniform_int_distribution<int> rand_idx(0, spectrum_size_ - 1);
-		size_t oligo_first_idx = rand_idx(gen);
+		size_t oligo_first_idx = rand_idx(rd);
 		size_t oligo_last_idx = oligo_first_idx;
 
 
 		std::vector <bool> is_in_offspring(spectrum_size_, false);
 		// Mark this oligo so we know it's already in offspring
-		is_in_offspring[oligo_first_idx] = true; 
+		is_in_offspring[oligo_first_idx] = true;
 
 		// Flag shows which side of constructed sequence was modified last
-		bool is_beginning_modified = true; 
+		bool is_beginning_modified = true;
 
 		// Impossible index value to indicate max index hasn't been chosen yet
 		const auto INDEX_UNSET = spectrum_size_;
 
-		for(size_t oligo_num = 0; oligo_num < spectrum_size_ - 1; oligo_num++)
+		for (size_t oligo_num = 0; oligo_num < spectrum_size_ - 1; oligo_num++)
 		{
 			// Store overlaps and corresponding indices of oligos adjacent to edge oligos in both parents
 			// 0,1 - predecessors; 2,3 - successors
 			size_t adjacent_indices[4];
-			size_t adjacent_overlaps[4]{ 0 }; 
+			size_t adjacent_overlaps[4]{ 0 };
 			size_t max_tie_indices[4];
 			int tie_idx = -1;
 			size_t max_overlap_idx = INDEX_UNSET;
 
-			if(is_beginning_modified) {
+			if (is_beginning_modified) {
 				adjacent_indices[0] = parent1_predecessors[oligo_first_idx];
 				adjacent_indices[1] = parent2_predecessors[oligo_first_idx];
 				adjacent_overlaps[0] = overlap_matrix_[parent1_predecessors[oligo_first_idx]][oligo_first_idx];
 				adjacent_overlaps[1] = overlap_matrix_[parent2_predecessors[oligo_first_idx]][oligo_first_idx];
 			}
-			if(!is_beginning_modified || oligo_num == 0) {
+			if (!is_beginning_modified || oligo_num == 0) {
 				adjacent_indices[2] = parent1[oligo_last_idx];
 				adjacent_indices[3] = parent2[oligo_last_idx];
 				adjacent_overlaps[2] = overlap_matrix_[oligo_last_idx][parent1[oligo_last_idx]];
@@ -410,32 +419,32 @@ namespace ga {
 
 			int max_overlap = -1;
 			//const size_t max_overlap_idx = std::distance(adjacent_overlaps, std::max_element(adjacent_overlaps, adjacent_overlaps + 4));
-			for(size_t i = 0; i < 4; ++i)
+			for (size_t i = 0; i < 4; ++i)
 			{
 				assert(adjacent_indices[i] < spectrum_size_);
 
-				if(!is_in_offspring[adjacent_indices[i]])
-					if(adjacent_overlaps[i] > max_overlap)
+				if (!is_in_offspring[adjacent_indices[i]])
+					if (adjacent_overlaps[i] > max_overlap)
 					{
-						if(adjacent_overlaps[i] == max_overlap)
+						if (adjacent_overlaps[i] == max_overlap)
 							tie_idx++;
 						else
 							tie_idx = 0;
 
 						max_tie_indices[tie_idx] = adjacent_indices[i];
-						max_overlap = adjacent_overlaps[i];	
+						max_overlap = adjacent_overlaps[i];
 					}
 			}
 
-			if(tie_idx == 0)
+			if (tie_idx == 0)
 				max_overlap_idx = max_tie_indices[tie_idx];
 
-			if(tie_idx > 0) {
+			if (tie_idx > 0) {
 				std::uniform_int_distribution<size_t> random_max(0, tie_idx);
-				max_overlap_idx = max_tie_indices[random_max(gen)];
+				max_overlap_idx = max_tie_indices[random_max(rd)];
 			}
 
-			if(max_overlap_idx == INDEX_UNSET)
+			if (max_overlap_idx == INDEX_UNSET)
 			{
 				for (size_t i = 0; i < spectrum_size_; ++i) {
 					if (!is_in_offspring[i]) {
@@ -470,14 +479,14 @@ namespace ga {
 		}
 		offspring[oligo_last_idx] = oligo_first_idx;
 		mutation(offspring);
-		}
+	}
 
 
 
 	inline int genetic_algorithm::partsum_select() const
 	{
 		const std::uniform_real_distribution<float> rand_sum(0, part_sum_fitness_.back());
-		const float rand = rand_sum(gen);
+		const float rand = rand_sum(rd);
 		const auto it_start = std::upper_bound(part_sum_fitness_.begin(), part_sum_fitness_.end(), rand);
 		auto idx = std::distance(part_sum_fitness_.begin(), it_start);
 
@@ -487,7 +496,7 @@ namespace ga {
 			if (it_start != it_end) {
 				const int range_size = std::distance(it_start, it_end);
 				const std::uniform_int_distribution<int> rand_idx(0, range_size - 1);
-				idx += rand_idx(gen);
+				idx += rand_idx(rd);
 			}
 		}
 		return idx;
@@ -527,7 +536,7 @@ namespace ga {
 
 	inline void genetic_algorithm::statistics(stats& stats) const
 	{
-		const auto minmax_pair = minmax_element(old_population_.begin(), old_population_.end(), [](const std::pair<int, std::vector<unsigned>>& lhs, const std::pair<int, individual_t>& rhs) {return lhs.first < rhs.first; });
+		const auto minmax_pair = minmax_element(old_population_.begin(), old_population_.end(), [](const std::pair<int, std::vector<size_t>>& lhs, const std::pair<int, individual_t>& rhs) {return lhs.first < rhs.first; });
 		const long sum = accumulate(old_population_.begin(), old_population_.end(), 0.0f, [](const long curr_sum, const std::pair<int, individual_t>& rhs) {return curr_sum + rhs.first; });
 		stats.min = minmax_pair.first->first;
 		stats.max = minmax_pair.second->first;
@@ -535,7 +544,7 @@ namespace ga {
 		stats.avg = static_cast<float>(sum) / static_cast<float>(population_size_);
 	}
 
-	inline void genetic_algorithm::report(stats& stats, const int gen) const
+	inline void genetic_algorithm::report(const stats& stats, const int gen) const
 	{
 		const auto ind_string_length = format_individual(old_population_[0].second).size();
 		std::printf("------------------------------------------------------------------------\n");
@@ -549,8 +558,13 @@ namespace ga {
 			// may add individual display
 			std::printf(" %4d %45s     %3d       %3.2f\n", i, "Individual", objective, fitness_function(objective));
 		}
+		summary(stats, gen);
+	}
+
+	inline void genetic_algorithm::summary(const stats& stats, const int gen)
+	{
 		std::printf("------------------------------------------------------------------------\n");
-		std::printf("   max = %3llu    min = %3llu  avg = %3.3f                                  \n", stats.max, stats.min, stats.avg);
+		std::printf("Generation no: %2d,  max = %3llu    min = %3llu  avg = %3.3f               \n", gen, stats.max, stats.min, stats.avg);
 		std::printf("------------------------------------------------------------------------\n\n");
 	}
 }
