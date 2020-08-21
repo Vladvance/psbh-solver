@@ -30,8 +30,7 @@ namespace ea {
 		explicit exact_algorithm(const sbh_data& problem, cxxproperties::Properties& props) :
 		exact_algorithm(problem)
 		{
-			is_position_used = false;
-			// is_position_used = props.get<bool>("use-position-info");
+			is_position_used = props.get<bool>("use-position-info");
 		}
 	private:
 		const size_t sequence_length_;
