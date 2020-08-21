@@ -94,8 +94,8 @@ namespace ea
 					// create copy of current solution and append that child to copy
 					for (auto it = std::next(graph_[idx].begin()); it != graph_[idx].end(); ++it)
 					{
-						if(is_position_used && solutions[sol_idx].oligo_count + 1 < spectrum_[*it].posL ||
-						   spectrum_[*it].posH < solutions[sol_idx].oligo_count + 1) 
+						if(is_position_used && (solutions[sol_idx].oligo_count + 1 < spectrum_[*it].posL ||
+						   spectrum_[*it].posH < solutions[sol_idx].oligo_count + 1)) 
 							continue;
 						solutions.emplace_back(solutions[sol_idx]);
 						solutions.back().data[idx] = *it;
@@ -105,8 +105,8 @@ namespace ea
 				}
 				const size_t next_oligo_idx = graph_[idx].front();
 				// If next_oligo doesn't fit, stop construction and move to next solution
-				if (is_position_used && solutions[sol_idx].oligo_count + 1 < spectrum_[next_oligo_idx].posL ||
-					spectrum_[next_oligo_idx].posH < solutions[sol_idx].oligo_count + 1)
+				if (is_position_used && (solutions[sol_idx].oligo_count + 1 < spectrum_[next_oligo_idx].posL ||
+					spectrum_[next_oligo_idx].posH < solutions[sol_idx].oligo_count + 1))
 					break;;
 				solutions[sol_idx].data[idx] = next_oligo_idx;
 				solutions[sol_idx].last_idx = next_oligo_idx;

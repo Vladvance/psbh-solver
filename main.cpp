@@ -73,7 +73,7 @@ int main(int argc, char** argv)
 {
 	cxxproperties::Properties properties;
 	parse_cli_args(argc, argv, properties);
-
+	
 	const std::string filename = properties.get("file");
 	const std::string algorithm = properties.get("algorithm");
 	
