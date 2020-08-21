@@ -7,6 +7,7 @@
 
 #include "rapidxml/rapidxml.hpp"
 #include "rapidxml/rapidxml_utils.hpp"
+#include "pugixml/pugixml.hpp"
 
 
 enum nucleotides {
@@ -118,52 +119,83 @@ inline struct sbh_data load_problem_hackerrank(std::istream& is) {
 }
 
 inline struct sbh_data load_problem_xml(std::istream& is) {
-	//parse XML unsigned
 	std::vector<char> buffer;
 
 	is.seekg(0, std::ios::end);
 	buffer.reserve(is.tellg());
 	is.seekg(0, std::ios::beg);
 	buffer.assign((std::istreambuf_iterator<char>(is)), std::istreambuf_iterator<char	>());
-	char* pt = buffer.data();
 
-	rapidxml::xml_document<>doc;
-	doc.parse<0>(pt);
+	pugi::xml_document doc;
+	pugi::xml_parse_result result = doc.load_buffer_inplace(buffer.data(), buffer.size());
+	const auto dna = doc.child("dna");
+	const size_t sequence_length = dna.attribute("length").as_uint();
+	const uint32_t start_oligo_seq = encode(dna.attribute("start").value());
+	const oligo start_oligo{0, 0,0, start_oligo_seq};
 
-	//get length of final sequence
-	rapidxml::xml_node<>* node = doc.first_node();
-	rapidxml::xml_attribute<>* attr = node->first_attribute("length");
-	const size_t sequence_length = strtol(attr->value(), nullptr, 10);
+	const pugi::xml_node probe = dna.child("probe");
+	const size_t oligo_length = std::strlen(probe.attribute("pattern").as_string());
 
-	//get start oligo
-	attr = attr->next_attribute("start");
-	const uint32_t start_oligo_seq = encode(std::string(attr->value()));
-	const oligo start_oligo{0, 0,0,start_oligo_seq};
-
-	//get length of each oligo (k)
-	node = node->first_node("probe");
-	attr = node->first_attribute("pattern");
-	const size_t oligo_length = attr->value_size();
-	assert(oligo_length < 16);
-
-	const size_t spectrum_size = count_children(node);
-	std::vector<oligo> spectrum(spectrum_size);
-
-
-	size_t idx = 0;
-	for (node = node->first_node("cell"); node != nullptr; node = node->next_sibling()) {
-		spectrum[idx].index = idx;
-		attr = node->first_attribute("posL");
-		spectrum[idx].posL = strtol(attr->value(), nullptr, 10);
-
-		attr = attr->next_attribute("posH");
-		spectrum[idx].posH = strtol(attr->value(), nullptr, 10);
-
-		spectrum[idx].seq = encode(std::string(node->value()));
-		idx++;
+	std::vector<oligo> spectrum;
+	auto index = 0;
+	for(auto cell : probe.children("cell")) {
+		const auto posL = cell.attribute("posL").as_ullong();
+		const auto posH = cell.attribute("posH").as_ullong();
+		const auto oligo = encode(cell.child_value());
+		spectrum.emplace_back(index++, posL, posH, oligo);
 	}
-
+	
 	const auto start_it = std::lower_bound(spectrum.begin(), spectrum.end(), start_oligo);
 	const size_t start_oligo_idx = std::distance(spectrum.begin(), start_it);
 	return sbh_data(oligo_length, sequence_length, start_oligo_idx, spectrum);
 }
+
+	
+//struct sbh_data load_problem_xml2(std::istream& is) {
+//	std::vector<char> buffer;
+//
+//	is.seekg(0, std::ios::end);
+//	buffer.reserve(is.tellg());
+//	is.seekg(0, std::ios::beg);
+//	buffer.assign((std::istreambuf_iterator<char>(is)), std::istreambuf_iterator<char	>());
+//
+//	rapidxml::xml_document<>doc;
+//	doc.parse<0>(buffer.data());
+//
+//	//get length of final sequence
+//	rapidxml::xml_node<>* node = doc.first_node();
+//	rapidxml::xml_attribute<>* attr = node->first_attribute("length");
+//	const size_t sequence_length = strtol(attr->value(), nullptr, 10);
+//
+//	//get start oligo
+//	attr = attr->next_attribute("start");
+//	const uint32_t start_oligo_seq = encode(std::string(attr->value()));
+//	const oligo start_oligo{0, 0,0,start_oligo_seq};
+//
+//	//get length of each oligo (k)
+//	node = node->first_node("probe");
+//	attr = node->first_attribute("pattern");
+//	const size_t oligo_length = attr->value_size();
+//	assert(oligo_length < 16);
+//
+//	const size_t spectrum_size = count_children(node);
+//	std::vector<oligo> spectrum(spectrum_size);
+//
+//
+//	size_t idx = 0;
+//	for (node = node->first_node("cell"); node != nullptr; node = node->next_sibling()) {
+//		spectrum[idx].index = idx;
+//		attr = node->first_attribute("posL");
+//		spectrum[idx].posL = strtol(attr->value(), nullptr, 10);
+//
+//		attr = attr->next_attribute("posH");
+//		spectrum[idx].posH = strtol(attr->value(), nullptr, 10);
+//
+//		spectrum[idx].seq = encode(std::string(node->value()));
+//		idx++;
+//	}
+//
+//	const auto start_it = std::lower_bound(spectrum.begin(), spectrum.end(), start_oligo);
+//	const size_t start_oligo_idx = std::distance(spectrum.begin(), start_it);
+//	return sbh_data(oligo_length, sequence_length, start_oligo_idx, spectrum);
+//}

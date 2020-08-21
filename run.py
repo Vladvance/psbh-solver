@@ -36,12 +36,15 @@ def get_instance_from_server(sequence_length, oligo_length, positive_errors_perc
 
 def initialize_results_file(filename):
     with open(filename, "w") as f:
-        f.write("INSTANCE,ALGORITHM,SEED,STATUS,OBJECTIVE,TIME\n")
+        f.write("sep=,\n")
+        f.write("INSTANCE, SEQUENCE_LENGTH, OLIGO_LENGTH, PERROR_PERCENT, ALGORITHM,SEED,STATUS,OBJECTIVE,TIME\n")
 
 
 def write_results(filename, results):
-    content = ",".join([results["instance"], results["algorithm"], results["seed"],
-                        results["status"], results["objective"], results["nodes"]])
+    content = ",".join(
+        [results["instance"], results["sequence_length"], results["oligo_length"], results["perror_percent"],
+         results["algorithm"], results["seed"],
+         results["status"], results["objective"], results["time"]])
 
     with open(filename, "a") as f:
         f.write(content + "\n")
@@ -51,6 +54,10 @@ def run_entry(instance, algorithm, data, seed):
     # Keep the result
     results = dict()
     results["instance"] = instance
+    instance_data = instance.split('_')
+    results["sequence_length"] = instance_data[0]
+    results["oligo_length"] = instance_data[1]
+    results["perror_percent"] = instance_data[2]
     results["algorithm"] = algorithm
     results["seed"] = str(seed)
     results["status"] = "Error"
@@ -77,11 +84,8 @@ def run_entry(instance, algorithm, data, seed):
             results["status"] = status
 
             if status != "Error":
-                results["nodes"] = str_output[3]
-                results["time"] = str_output[4]
-
-            if status == "Feasible" or status == "Optimal":
                 results["objective"] = str_output[1]
+                results["time"] = str_output[2]
 
     except:
         results["status"] = "Error"
@@ -101,7 +105,7 @@ def run_entry(instance, algorithm, data, seed):
         progress = (data["progress"] / total_entries) * 100
 
         print(f"[{data['progress']:3} of {total_entries:3} ({progress:6.2f}%) completed] "
-              f"{algorithm:15} -> {instance:16} -> {seed:4} -> {results['status']:8}")
+              f"{algorithm:15} -> {instance:27} -> {seed:4} -> [{results['status']:8} Obj:{results['objective']:5} T:{results['time']:5}]")
 
         sys.stdout.flush()
 
@@ -117,7 +121,7 @@ def main():
 
     # Map used to store data necessary to run the experiments
     data = dict()
-    data["command"] = "./build/xseq"  # program
+    data["command"] = "./psbh_solver.exe"  # program
     data["threads"] = 2  # entries to solve simultaneously
     data["output-file"] = "results.csv"  # file to write the results
     data["instances-path"] = "./instances"  # base path to instances
@@ -135,24 +139,20 @@ def main():
         get_instance_from_server(500, 10, pep, 20)
 
     for instance in os.listdir('./instances'):
-        data["instances"][instance] = data["instances-path"] + "/" + instance + ".xml"
+        data["instances"][instance] = data["instances-path"] + "/" + instance
 
     # Algorithms' settings
-    params_exact = ("--algorithm exact".split(" ") +
-                    # "--verbose" +
-                    "--use-vertex-lists true".split(" "))
+    params_exact = ("--algorithm exact".split(" ")
+                    # + "--use-position-info".split(" ")
+                    )
 
     params_genetic = ("--algorithm genetic".split(" ") +
-                      "--use-binary-encoding true".split(" ") +
                       "--population-size 50".split(" ") +
                       "--crossover-probability 0.9".split(" ") +
-                      "--mutation-probability 0.001".split(" ") +
-                      "--selection srm".split(" ") +
-                      "--keep-best true".split(" "))
+                      "--mutation-probability 0.001".split(" "))
 
     data["algorithms"]["exact"] = params_exact
     data["algorithms"]["genetic"] = params_genetic
-    # data["algorithms"]["hybrid"] = params_hybrid
 
     # Create and initialize the output file
     if not os.path.exists(data["output-file"]) or not args.continue_previous:
@@ -173,12 +173,12 @@ def main():
     data["progress"] = len(entries_completed)
 
     # Run each entry (instance, algorithm, seed)
-    # with ThreadPoolExecutor(max_workers=data["threads"]) as executor:
-    #     for instance in list(data["instances"].keys()):
-    #         for algorithm in list(data["algorithms"].keys()):
-    #             for seed in data["seeds"]:
-    #                 if entries_completed.count((instance, algorithm, seed)) == 0:
-    #                     executor.submit(run_entry, instance, algorithm, data, seed)
+    with ThreadPoolExecutor(max_workers=data["threads"]) as executor:
+        for instance in list(data["instances"].keys()):
+            for algorithm in list(data["algorithms"].keys()):
+                for seed in data["seeds"]:
+                    if entries_completed.count((instance, algorithm, seed)) == 0:
+                        executor.submit(run_entry, instance, algorithm, data, seed)
 
 
 ###################################################################################################

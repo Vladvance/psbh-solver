@@ -1,0 +1,16 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/psbh_solver/v16
+/.vs
+/Debug
+/x64
+/CppProperties.json
+/results.csv
+/psbh_solver.vcxproj.user
+/psbh_solver.vcxproj.filters
+/psbh_solver.sln.DotSettings.user
+/psbh_solver.vcxproj.DotSettings
+/.idea
+/instances
